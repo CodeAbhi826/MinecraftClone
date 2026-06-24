@@ -2,6 +2,7 @@
 #include "../core/Math.h"
 #include <glm/glm.hpp>
 #include "../core/Block.h"
+#include <GLFW/glfw3.h>
 
 class World;
 class Player {
@@ -10,6 +11,9 @@ public:
     Vec3 velocity = Vec3(0);
     float yaw = 0, pitch = 0;
     bool onGround = false, flying = false;
+
+    double lastMX = 0, lastMY = 0;
+    bool hasLastCursor = false;
 
     int hotbar[9] = {
         (int)Block::ID::grass_block,

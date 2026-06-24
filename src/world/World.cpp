@@ -8,7 +8,8 @@
 World::World(uint64_t seed) : generator(seed),
     genPool(std::max(1u, std::thread::hardware_concurrency() > 1
         ? std::thread::hardware_concurrency() - 1 : 1u)),
-    meshPool(std::max(1u, std::thread::hardware_concurrency() / 2)) {}
+    meshPool(std::max(1u, std::thread::hardware_concurrency() / 2)) {
+}
 
 World::~World() = default;
 

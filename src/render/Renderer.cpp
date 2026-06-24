@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <glm/gtc/type_ptr.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
 static const char* worldVertSrc = R"(

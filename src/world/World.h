@@ -35,6 +35,6 @@ private:
     std::mutex uploadMutex;
     std::vector<PendingUpload> pendingUploads;
 
-    int centerX = 0, centerZ = 0, radius = 8;
+    int centerX = 0, centerZ = 0, radius = -999;
     static int64_t chunkKey(int cx, int cz) { return (int64_t(cx) << 32) | uint32_t(cz); }
 };
