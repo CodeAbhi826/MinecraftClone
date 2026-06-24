@@ -16,5 +16,4 @@ public:
     static ChunkMesh build(const Chunk& chunk, const World& world);
 private:
     static bool isVisible(const World& world, int wx, int wy, int wz, int dir);
-    static void addFace(ChunkMesh& m, const glm::vec3& pos, int dir, uint16_t texId, float ao);
 };

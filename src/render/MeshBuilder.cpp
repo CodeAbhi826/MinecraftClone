@@ -1,5 +1,7 @@
 #include "MeshBuilder.h"
 #include "../core/Block.h"
+#include "../core/Math.h"
+#include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
 using namespace glm;

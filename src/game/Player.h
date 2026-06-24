@@ -9,6 +9,8 @@ public:
     Vec3 velocity = Vec3(0);
     float yaw = 0, pitch = 0;
     bool onGround = false, flying = false;
+    double lastMX = 0, lastMY = 0;
+    bool hasLastCursor = false;
     void update(float dt, World& world);
     void processInput(GLFWwindow* win, float dt);
     void breakBlock(World& world);

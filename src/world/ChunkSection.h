@@ -33,10 +33,11 @@ private:
     int getPaletteIndex(BlockStateID state) const;
     void addToPalette(BlockStateID state);
     void resizePalette(int newBits);
+    void ensureGuardWord();
 };
 
 inline ChunkSection::ChunkSection() {
-    data.resize((kVolume * 4 + 63) / 64, 0);
+    data.resize((kVolume * 4 + 63) / 64 + 1, 0);
     palette.push_back(0);
 }
 inline int ChunkSection::getPaletteIndex(BlockStateID state) const {
@@ -48,10 +49,16 @@ inline void ChunkSection::addToPalette(BlockStateID state) {
     if (palette.size() > (1u << bitsPerBlock))
         resizePalette(bitsPerBlock + 1);
 }
+inline void ChunkSection::ensureGuardWord() {
+    size_t needed = (kVolume * bitsPerBlock + 63) / 64 + 1;
+    if (data.size() < needed) data.resize(needed, 0);
+}
+
 inline void ChunkSection::resizePalette(int newBits) {
     int oldBits = bitsPerBlock;
     bitsPerBlock = newBits;
-    std::vector<uint64_t> newData((kVolume * bitsPerBlock + 63) / 64, 0);
+    ensureGuardWord();
+    std::vector<uint64_t> newData((kVolume * bitsPerBlock + 63) / 64 + 1, 0);
     for (int i = 0; i < kVolume; ++i) {
         int oldIndex = (i * oldBits);
         int oldWord = oldIndex >> 6;

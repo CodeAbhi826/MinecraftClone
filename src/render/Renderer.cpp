@@ -2,6 +2,7 @@
 #include "../core/Block.h"
 #include <iostream>
 #include <vector>
+#include <glm/gtc/type_ptr.hpp>
 
 static const char* worldVertSrc = R"(
 #version 460 core
@@ -97,8 +98,11 @@ Renderer::Renderer(int width, int height) {
     window = glfwCreateWindow(width, height, "VoxelCraft", nullptr, nullptr);
     glfwMakeContextCurrent(window);
     gladLoadGL((GLADloadfunc)glfwGetProcAddress);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.5f, 0.7f, 1.0f, 1.0f);
 
     m_worldProgram = createProgram(worldVertSrc, worldFragSrc);

@@ -35,7 +35,7 @@ namespace Block {
             p[(int)ID::dirt] = {true, true, false};
             p[(int)ID::cobblestone] = {true, true, false};
             p[(int)ID::wood] = {true, true, false};
-            p[(int)ID::leaves] = {true, true, false};
+            p[(int)ID::leaves] = {false, true, false};
             p[(int)ID::sand] = {true, true, false};
             p[(int)ID::water] = {false, false, true};
             p[(int)ID::glass] = {false, true, false};

@@ -21,6 +21,7 @@ public:
     void loadChunkAsync(int cx, int cz);
     void lightChunk(Chunk* chunk);
     void meshChunk(Chunk* chunk);
+    void markChunkDirty(int cx, int cz);
     std::vector<Chunk*> getReadyChunks();
 
     WorldGenerator generator;

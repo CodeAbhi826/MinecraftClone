@@ -1,5 +1,8 @@
 #include "World.h"
 #include <iostream>
+#include <mutex>
+#include <shared_mutex>
+#include <thread>
 
 World::World(uint64_t seed) : generator(seed),
     genPool(std::max(1u, std::thread::hardware_concurrency() > 1
@@ -34,6 +37,21 @@ void World::setBlock(int x, int y, int z, BlockStateID s) {
     if (c) {
         c->setBlock(bx, y, bz, s);
         c->sections[(y+64)/16].dirty = true;
+        markChunkDirty(cx, cz);
+        // If on chunk boundary, also mark neighbor chunks
+        if (bx == 0) markChunkDirty(cx - 1, cz);
+        if (bx == 15) markChunkDirty(cx + 1, cz);
+        if (bz == 0) markChunkDirty(cx, cz - 1);
+        if (bz == 15) markChunkDirty(cx, cz + 1);
+    }
+}
+
+void World::markChunkDirty(int cx, int cz) {
+    Chunk* c = getChunk(cx, cz);
+    if (c) {
+        Chunk::State s = c->state.load();
+        if (s == Chunk::Empty || s == Chunk::Ready)
+            c->state = Chunk::Ready;
     }
 }
 
