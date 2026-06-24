@@ -2,8 +2,8 @@
 #include <iostream>
 
 World::World(uint64_t seed) : generator(seed),
-    genPool(std::thread::hardware_concurrency() - 1),
-    meshPool(std::thread::hardware_concurrency() - 2) {}
+    genPool(std::max(1u, std::thread::hardware_concurrency() > 1
+        ? std::thread::hardware_concurrency() - 1 : 1u)) {}
 
 World::~World() = default;
 
@@ -39,18 +39,18 @@ void World::setBlock(int x, int y, int z, BlockStateID s) {
 
 void World::loadChunkAsync(int cx, int cz) {
     auto key = chunkKey(cx, cz);
+    std::shared_ptr<Chunk> raw;
     {
         std::unique_lock lock(chunkMutex);
         if (chunks.contains(key)) return;
-        auto c = std::make_unique<Chunk>(cx, cz);
-        c->state = Chunk::Generating;
-        chunks[key] = std::move(c);
+        raw = std::make_shared<Chunk>(cx, cz);
+        raw->state = Chunk::Generating;
+        chunks[key] = raw;
     }
-    Chunk* raw = chunks[key].get();
     genPool.enqueue([this, raw] {
         generator.generate(*raw);
-        lightChunk(raw);
-        meshPool.enqueue([this, raw] { meshChunk(raw); });
+        lightChunk(raw.get());
+        meshChunk(raw.get());
     });
 }
 

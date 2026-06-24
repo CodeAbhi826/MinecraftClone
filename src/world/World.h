@@ -25,9 +25,9 @@ public:
 
     WorldGenerator generator;
 private:
-    std::unordered_map<int64_t, std::unique_ptr<Chunk>> chunks;
+    std::unordered_map<int64_t, std::shared_ptr<Chunk>> chunks;
     mutable std::shared_mutex chunkMutex;
-    ThreadPool genPool, meshPool;
+    ThreadPool genPool;
     int centerX = 0, centerZ = 0, radius = 8;
 
     static int64_t chunkKey(int cx, int cz) { return (int64_t(cx) << 32) | uint32_t(cz); }
