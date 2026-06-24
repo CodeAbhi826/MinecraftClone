@@ -14,12 +14,14 @@ layout(location=3) in float aAO;
 out vec2 vTexCoord;
 out float vTexLayer;
 out float vAO;
+out vec3 vWorldPos;
 uniform mat4 uMVP;
 void main() {
     gl_Position = uMVP * vec4(aPos, 1.0);
     vTexCoord = aTexCoord;
     vTexLayer = aTexLayer;
     vAO = aAO;
+    vWorldPos = aPos;
 }
 )";
 
@@ -28,11 +30,19 @@ static const char* worldFragSrc = R"(
 in vec2 vTexCoord;
 in float vTexLayer;
 in float vAO;
+in vec3 vWorldPos;
 out vec4 FragColor;
 uniform sampler2DArray uTexArray;
+uniform vec3 uCamPos;
+uniform vec4 uFogColor;
+uniform float uFogStart;
+uniform float uFogEnd;
 void main() {
     vec4 col = texture(uTexArray, vec3(vTexCoord, vTexLayer));
-    FragColor = vec4(col.rgb * vAO, col.a);
+    col.rgb *= vAO;
+    float dist = length(vWorldPos - uCamPos);
+    float fogFactor = clamp((dist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
+    FragColor = mix(col, uFogColor, fogFactor);
 }
 )";
 
@@ -188,7 +198,7 @@ void Renderer::uploadChunkMesh(int cx, int cz, const ChunkMesh& mesh) {
         }
         const auto& verts = (i == 0) ? mesh.opaqueVertices : mesh.transparentVertices;
         const auto& idxs = (i == 0) ? mesh.opaqueIndices : mesh.transparentIndices;
-        if (verts.empty()) continue;
+        if (verts.empty()) { cgl.indexCount[i] = 0; continue; }
 
         glCreateVertexArrays(1, &cgl.vao[i]);
         glCreateBuffers(1, &cgl.vbo[i]);
@@ -218,30 +228,29 @@ void Renderer::uploadChunkMesh(int cx, int cz, const ChunkMesh& mesh) {
 void Renderer::renderChunks(const glm::mat4& view, const glm::mat4& proj) {
     glUseProgram(m_worldProgram);
     m_textureAtlas.bind(0);
-    glm::vec3 camPos = glm::vec3(glm::inverse(view)[3]);
-    const float maxD = 16.0f * 14.0f;
+
+    glUniform3f(glGetUniformLocation(m_worldProgram, "uCamPos"), m_camPos.x, m_camPos.y, m_camPos.z);
+    glUniform4f(glGetUniformLocation(m_worldProgram, "uFogColor"), 0.5f, 0.7f, 1.0f, 1.0f);
+    glUniform1f(glGetUniformLocation(m_worldProgram, "uFogStart"), 16.0f * 6.0f);
+    glUniform1f(glGetUniformLocation(m_worldProgram, "uFogEnd"), 16.0f * 12.0f);
 
     glDisable(GL_BLEND);
     for (auto& [key, cgl] : chunkMeshes) {
-        int cx = (int)(key >> 32), cz = (int)(key & 0xFFFFFFFF);
-        float dx = (cx*16+8) - camPos.x, dz = (cz*16+8) - camPos.z;
-        if (dx*dx + dz*dz > maxD*maxD) continue;
         if (cgl.indexCount[0] == 0) continue;
         glBindVertexArray(cgl.vao[0]);
         glDrawElements(GL_TRIANGLES, cgl.indexCount[0], GL_UNSIGNED_INT, nullptr);
     }
 
     glEnable(GL_BLEND);
+    glDepthMask(GL_FALSE);
     for (auto& [key, cgl] : chunkMeshes) {
-        int cx = (int)(key >> 32), cz = (int)(key & 0xFFFFFFFF);
-        float dx = (cx*16+8) - camPos.x, dz = (cz*16+8) - camPos.z;
-        if (dx*dx + dz*dz > maxD*maxD) continue;
         if (cgl.indexCount[1] == 0) continue;
         glBindVertexArray(cgl.vao[1]);
         glDrawElements(GL_TRIANGLES, cgl.indexCount[1], GL_UNSIGNED_INT, nullptr);
     }
-    glBindVertexArray(0);
+    glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+    glBindVertexArray(0);
 }
 
 void Renderer::initCrosshair() {

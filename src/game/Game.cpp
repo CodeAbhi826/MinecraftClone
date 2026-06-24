@@ -16,7 +16,7 @@ Game::Game()
 {
     player.position = Vec3(0, 100, 0);
     lastTime = glfwGetTime();
-    world->updatePlayerPosition(0, 0, 10);
+    world->updatePlayerPosition(0, 0, settings.renderDistance);
     glfwSetScrollCallback(renderer->window, scrollCallback);
 }
 
@@ -48,7 +48,7 @@ void Game::run() {
         accumulator += dt;
         while (accumulator >= 0.05f) {
             player.update(0.05f, *world);
-            world->updatePlayerPosition((int)player.position.x, (int)player.position.z, 10);
+            world->updatePlayerPosition((int)player.position.x, (int)player.position.z, settings.renderDistance);
             accumulator -= 0.05f;
         }
 
@@ -66,9 +66,10 @@ void Game::run() {
 
         IVec3 targetBlock;
         bool hasTarget = player.getTargetBlock(*world, targetBlock);
-        glm::mat4 proj = glm::perspective(glm::radians(70.0f), 1280.0f / 720.0f, 0.1f, 1000.0f);
+        glm::mat4 proj = glm::perspective(glm::radians(settings.fov), 1280.0f / 720.0f, 0.1f, 1000.0f);
         glm::mat4 view = player.getViewMatrix();
 
+        renderer->m_camPos = player.position + Vec3(0, 1.6f, 0);
         renderer->beginFrame(proj * view);
         renderer->renderChunks(view, proj);
         if (hasTarget) renderer->renderBlockHighlight(targetBlock);

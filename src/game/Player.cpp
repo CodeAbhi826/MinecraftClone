@@ -168,13 +168,30 @@ void Player::placeBlock(World& world) {
              sin(glm::radians(pitch)),
              cos(glm::radians(pitch)) * sin(glm::radians(yaw)));
     Vec3 eye = position + Vec3(0, 1.6f, 0);
+
     IVec3 lastBp((int)floor(eye.x), (int)floor(eye.y), (int)floor(eye.z));
+
     for (float i = 0; i < 8.0f; i += 0.1f) {
         IVec3 bp((int)floor(eye.x + dir.x * i),
                  (int)floor(eye.y + dir.y * i),
                  (int)floor(eye.z + dir.z * i));
+
         if (world.getBlock(bp.x, bp.y, bp.z) != (uint16_t)Block::ID::air) {
-            world.setBlock(lastBp.x, lastBp.y, lastBp.z, hotbar[selectedSlot]);
+            float pMinX = position.x - 0.3f, pMaxX = position.x + 0.3f;
+            float pMinY = position.y, pMaxY = position.y + 1.8f;
+            float pMinZ = position.z - 0.3f, pMaxZ = position.z + 0.3f;
+
+            float bMinX = bp.x, bMaxX = bp.x + 1.0f;
+            float bMinY = bp.y, bMaxY = bp.y + 1.0f;
+            float bMinZ = bp.z, bMaxZ = bp.z + 1.0f;
+
+            bool intersects = (pMinX < bMaxX && pMaxX > bMinX) &&
+                              (pMinY < bMaxY && pMaxY > bMinY) &&
+                              (pMinZ < bMaxZ && pMaxZ > bMinZ);
+
+            if (!intersects) {
+                world.setBlock(lastBp.x, lastBp.y, lastBp.z, hotbar[selectedSlot]);
+            }
             return;
         }
         lastBp = bp;
