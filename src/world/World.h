@@ -13,7 +13,8 @@ public:
     ~World();
 
     Chunk* getChunk(int cx, int cz);
-    BlockStateID getBlock(int x, int y, int z);
+    const Chunk* getChunk(int cx, int cz) const;
+    BlockStateID getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockStateID state);
 
     void updatePlayerPosition(int px, int pz, int renderDistance);

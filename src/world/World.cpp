@@ -13,10 +13,16 @@ Chunk* World::getChunk(int cx, int cz) {
     return (it != chunks.end()) ? it->second.get() : nullptr;
 }
 
-BlockStateID World::getBlock(int x, int y, int z) {
+const Chunk* World::getChunk(int cx, int cz) const {
+    std::shared_lock lock(chunkMutex);
+    auto it = chunks.find(chunkKey(cx, cz));
+    return (it != chunks.end()) ? it->second.get() : nullptr;
+}
+
+BlockStateID World::getBlock(int x, int y, int z) const {
     int cx = x >> 4, cz = z >> 4;
     int bx = x & 15, bz = z & 15;
-    Chunk* c = getChunk(cx, cz);
+    const Chunk* c = getChunk(cx, cz);
     if (!c) return (uint16_t)Block::ID::air;
     return c->getBlock(bx, y, bz);
 }
