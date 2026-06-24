@@ -236,6 +236,9 @@ void Renderer::renderChunks(const glm::mat4& view, const glm::mat4& proj) {
 
     glDisable(GL_BLEND);
     for (auto& [key, cgl] : chunkMeshes) {
+        int cx = (int)(key >> 32), cz = (int)(key & 0xFFFFFFFF);
+        float dx = (cx*16+8) - m_camPos.x, dz = (cz*16+8) - m_camPos.z;
+        if (dx*dx + dz*dz > (16.0f*14.0f)*(16.0f*14.0f)) continue;
         if (cgl.indexCount[0] == 0) continue;
         glBindVertexArray(cgl.vao[0]);
         glDrawElements(GL_TRIANGLES, cgl.indexCount[0], GL_UNSIGNED_INT, nullptr);
@@ -244,6 +247,9 @@ void Renderer::renderChunks(const glm::mat4& view, const glm::mat4& proj) {
     glEnable(GL_BLEND);
     glDepthMask(GL_FALSE);
     for (auto& [key, cgl] : chunkMeshes) {
+        int cx = (int)(key >> 32), cz = (int)(key & 0xFFFFFFFF);
+        float dx = (cx*16+8) - m_camPos.x, dz = (cz*16+8) - m_camPos.z;
+        if (dx*dx + dz*dz > (16.0f*14.0f)*(16.0f*14.0f)) continue;
         if (cgl.indexCount[1] == 0) continue;
         glBindVertexArray(cgl.vao[1]);
         glDrawElements(GL_TRIANGLES, cgl.indexCount[1], GL_UNSIGNED_INT, nullptr);
@@ -430,7 +436,7 @@ void Renderer::renderBlockHighlight(const glm::ivec3& blockPos) {
     glm::mat4 mvp = m_prevProjView * model;
     glUseProgram(m_lineProgram);
     glUniformMatrix4fv(glGetUniformLocation(m_lineProgram,"uMVP"),1,GL_FALSE,&mvp[0][0]);
-    glUniform4f(glGetUniformLocation(m_lineProgram,"uColor"), 0.0f,0.0f,0.0f,1.0f);
+    glUniform4f(glGetUniformLocation(m_lineProgram,"uColor"), 1.0f,1.0f,1.0f,1.0f);
     glDisable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glBindVertexArray(m_highlightVAO);

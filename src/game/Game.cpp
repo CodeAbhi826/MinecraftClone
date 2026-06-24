@@ -52,9 +52,16 @@ void Game::run() {
             accumulator -= 0.05f;
         }
 
-        for (auto& up : world->drainUploads()) {
-            renderer->uploadChunkMesh(up.cx, up.cz, up.mesh);
+        static std::vector<World::PendingUpload> pendingUploads;
+        if (pendingUploads.empty())
+            pendingUploads = world->drainUploads();
+        for (int i = 0; i < 8 && !pendingUploads.empty(); ++i) {
+            renderer->uploadChunkMesh(pendingUploads.back().cx, pendingUploads.back().cz, pendingUploads.back().mesh);
+            pendingUploads.pop_back();
         }
+
+        if (glfwGetKey(renderer->window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+            glfwSetWindowShouldClose(renderer->window, true);
 
         static bool leftPressed = false, rightPressed = false;
         if (glfwGetMouseButton(renderer->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && !leftPressed) {
