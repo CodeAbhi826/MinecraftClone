@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/transform.hpp>
 
 static const char* worldVertSrc = R"(
 #version 460 core
@@ -57,6 +58,19 @@ void main() {
 }
 )";
 
+static const char* lineVertSrc = R"(
+#version 460 core
+layout(location=0) in vec3 aPos;
+uniform mat4 uMVP;
+void main(){ gl_Position = uMVP * vec4(aPos,1.0); }
+)";
+static const char* lineFragSrc = R"(
+#version 460 core
+uniform vec4 uColor;
+out vec4 FragColor;
+void main(){ FragColor = uColor; }
+)";
+
 static GLuint compileShader(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -107,11 +121,25 @@ Renderer::Renderer(int width, int height) {
 
     m_worldProgram = createProgram(worldVertSrc, worldFragSrc);
     m_uiProgram = createProgram(uiVertSrc, uiFragSrc);
+    m_lineProgram = createProgram(lineVertSrc, lineFragSrc);
 
     m_textureAtlas.generateProcedural();
 
+    glUseProgram(m_uiProgram);
+    glUniform1i(glGetUniformLocation(m_uiProgram, "uTexture"), 0);
+    glUseProgram(0);
+
+    uint8_t white[4] = {255,255,255,255};
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_whiteTex);
+    glTextureStorage2D(m_whiteTex, 1, GL_RGBA8, 1, 1);
+    glTextureSubImage2D(m_whiteTex, 0,0,0, 1,1, GL_RGBA, GL_UNSIGNED_BYTE, white);
+    glTextureParameteri(m_whiteTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_whiteTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
     initCrosshair();
     initHighlight();
+    initFont();
+    initTextVAO();
 }
 
 Renderer::~Renderer() {
@@ -125,8 +153,11 @@ Renderer::~Renderer() {
     glDeleteVertexArrays(1, &m_highlightVAO);
     glDeleteBuffers(1, &m_highlightVBO);
     glDeleteBuffers(1, &m_highlightEBO);
-    glDeleteVertexArrays(1, &m_hotbarVAO);
-    glDeleteBuffers(1, &m_hotbarVBO);
+    glDeleteProgram(m_lineProgram);
+    glDeleteTextures(1, &m_whiteTex);
+    glDeleteTextures(1, &m_fontTex);
+    glDeleteVertexArrays(1, &m_textVAO);
+    glDeleteBuffers(1, &m_textVBO);
     glDeleteProgram(m_worldProgram);
     glDeleteProgram(m_uiProgram);
     glfwTerminate();
@@ -153,23 +184,18 @@ void Renderer::uploadChunkMesh(int cx, int cz, const ChunkMesh& mesh) {
     glCreateBuffers(1, &cgl.ebo);
     glNamedBufferData(cgl.vbo, mesh.vertices.size() * sizeof(float), mesh.vertices.data(), GL_STATIC_DRAW);
     glNamedBufferData(cgl.ebo, mesh.indices.size() * sizeof(uint32_t), mesh.indices.data(), GL_STATIC_DRAW);
-
     glEnableVertexArrayAttrib(cgl.vao, 0);
     glVertexArrayAttribFormat(cgl.vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
     glVertexArrayAttribBinding(cgl.vao, 0, 0);
-
     glEnableVertexArrayAttrib(cgl.vao, 1);
     glVertexArrayAttribFormat(cgl.vao, 1, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(float));
     glVertexArrayAttribBinding(cgl.vao, 1, 0);
-
     glEnableVertexArrayAttrib(cgl.vao, 2);
     glVertexArrayAttribFormat(cgl.vao, 2, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(float));
     glVertexArrayAttribBinding(cgl.vao, 2, 0);
-
     glEnableVertexArrayAttrib(cgl.vao, 3);
     glVertexArrayAttribFormat(cgl.vao, 3, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(float));
     glVertexArrayAttribBinding(cgl.vao, 3, 0);
-
     glVertexArrayVertexBuffer(cgl.vao, 0, cgl.vbo, 0, 8 * sizeof(float));
     glVertexArrayElementBuffer(cgl.vao, cgl.ebo);
     cgl.indexCount = (int)mesh.indices.size();
@@ -178,10 +204,16 @@ void Renderer::uploadChunkMesh(int cx, int cz, const ChunkMesh& mesh) {
 void Renderer::renderChunks(const glm::mat4& view, const glm::mat4& proj) {
     glUseProgram(m_worldProgram);
     m_textureAtlas.bind(0);
+    glm::vec3 camPos = glm::vec3(glm::inverse(view)[3]);
+    const float maxD = 16.0f * 14.0f;
     for (auto& [key, cgl] : chunkMeshes) {
+        int cx = (int)(key >> 32), cz = (int)(key & 0xFFFFFFFF);
+        float dx = (cx*16+8) - camPos.x, dz = (cz*16+8) - camPos.z;
+        if (dx*dx + dz*dz > maxD*maxD) continue;
         glBindVertexArray(cgl.vao);
         glDrawElements(GL_TRIANGLES, cgl.indexCount, GL_UNSIGNED_INT, nullptr);
     }
+    glBindVertexArray(0);
 }
 
 void Renderer::initCrosshair() {
@@ -225,22 +257,85 @@ void Renderer::initHighlight() {
     glVertexArrayElementBuffer(m_highlightVAO, m_highlightEBO);
 }
 
+void Renderer::initFont() {
+    static const uint8_t G[15][7] = {
+        {0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110},
+        {0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110},
+        {0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111},
+        {0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110},
+        {0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010},
+        {0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110},
+        {0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110},
+        {0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000},
+        {0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110},
+        {0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100},
+        {0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000},
+        {0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000},
+        {0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110},
+        {0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000},
+        {0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000},
+    };
+    const int GW=5, GH=7, N=15, texW=N*GW, texH=GH;
+    std::vector<uint8_t> data((size_t)texW*texH*4, 0);
+    for (int gy=0; gy<GH; ++gy) {
+        int row = (GH-1) - gy;
+        for (int g=0; g<N; ++g)
+            for (int gx=0; gx<GW; ++gx) {
+                bool on = (G[g][gy] >> (4-gx)) & 1;
+                size_t idx = ((size_t)row*texW + (g*GW+gx))*4;
+                uint8_t v = on?255:0;
+                data[idx+0]=v; data[idx+1]=v; data[idx+2]=v; data[idx+3]=v;
+            }
+    }
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_fontTex);
+    glTextureStorage2D(m_fontTex, 1, GL_RGBA8, texW, texH);
+    glTextureSubImage2D(m_fontTex, 0,0,0, texW,texH, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+    glTextureParameteri(m_fontTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_fontTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_fontTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_fontTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+void Renderer::initTextVAO() {
+    glCreateVertexArrays(1, &m_textVAO);
+    glCreateBuffers(1, &m_textVBO);
+    glEnableVertexArrayAttrib(m_textVAO, 0);
+    glVertexArrayAttribFormat(m_textVAO, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_textVAO, 0, 0);
+    glEnableVertexArrayAttrib(m_textVAO, 1);
+    glVertexArrayAttribFormat(m_textVAO, 1, 2, GL_FLOAT, GL_FALSE, 3*sizeof(float));
+    glVertexArrayAttribBinding(m_textVAO, 1, 0);
+    glVertexArrayVertexBuffer(m_textVAO, 0, m_textVBO, 0, 5*sizeof(float));
+}
+
+int Renderer::glyphIndex(char c) const {
+    if (c>='0'&&c<='9') return c-'0';
+    if (c=='F') return 10;
+    if (c=='P') return 11;
+    if (c=='S') return 12;
+    if (c==':') return 13;
+    if (c==' ') return 14;
+    return -1;
+}
+
 void Renderer::renderCrosshair() {
     glUseProgram(m_uiProgram);
+    glBindTextureUnit(0, m_whiteTex);
     glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), 1, 1, 1, 1);
-    glBindTextureUnit(0, 0);
+    glDisable(GL_DEPTH_TEST);
     glBindVertexArray(m_crosshairVAO);
     glDrawArrays(GL_LINES, 0, 8);
     glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
     glUseProgram(0);
 }
 
 void Renderer::renderBlockHighlight(const glm::ivec3& blockPos) {
     glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(blockPos));
     glm::mat4 mvp = m_prevProjView * model;
-
-    glUseProgram(m_worldProgram);
-    glUniformMatrix4fv(glGetUniformLocation(m_worldProgram, "uMVP"), 1, GL_FALSE, &mvp[0][0]);
+    glUseProgram(m_lineProgram);
+    glUniformMatrix4fv(glGetUniformLocation(m_lineProgram,"uMVP"),1,GL_FALSE,&mvp[0][0]);
+    glUniform4f(glGetUniformLocation(m_lineProgram,"uColor"), 0.0f,0.0f,0.0f,1.0f);
     glDisable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glBindVertexArray(m_highlightVAO);
@@ -248,6 +343,43 @@ void Renderer::renderBlockHighlight(const glm::ivec3& blockPos) {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glEnable(GL_DEPTH_TEST);
     glBindVertexArray(0);
+    glUseProgram(0);
+}
+
+void Renderer::renderText(const std::string& text, float ndcX, float ndcY, float scaleH) {
+    const float GW=5.0f, GH=7.0f, N=15.0f;
+    float gh = scaleH;
+    float gw = scaleH * (GW/GH);
+    float adv = gw * 1.15f;
+    static std::vector<float> v;
+    v.clear();
+    float curX = ndcX;
+    for (char c : text) {
+        int gi = glyphIndex(c);
+        if (gi < 0) { curX += adv; continue; }
+        float u0 = (gi*GW)/(N*GW), u1 = ((gi+1)*GW)/(N*GW);
+        float top = ndcY, bot = ndcY - gh;
+        float q[6][5] = {
+            {curX,    top, 0, u0, 1.0f},
+            {curX+gw, top, 0, u1, 1.0f},
+            {curX+gw, bot, 0, u1, 0.0f},
+            {curX,    top, 0, u0, 1.0f},
+            {curX+gw, bot, 0, u1, 0.0f},
+            {curX,    bot, 0, u0, 0.0f},
+        };
+        for (int i=0;i<6;++i) for (int j=0;j<5;++j) v.push_back(q[i][j]);
+        curX += adv;
+    }
+    if (v.empty()) return;
+    glNamedBufferData(m_textVBO, v.size()*sizeof(float), v.data(), GL_DYNAMIC_DRAW);
+    glUseProgram(m_uiProgram);
+    glBindTextureUnit(0, m_fontTex);
+    glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), 1,1,1,1);
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(m_textVAO);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size()/5));
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
     glUseProgram(0);
 }
 
