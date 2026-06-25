@@ -118,14 +118,31 @@ static GLuint createProgram(const char* vs, const char* fs) {
 }
 
 Renderer::Renderer(int width, int height) {
-    glfwInit();
+    if (!glfwInit()) {
+        std::cerr << "FATAL: Failed to initialize GLFW" << std::endl;
+        std::exit(1);
+    }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
     window = glfwCreateWindow(width, height, "VoxelCraft", nullptr, nullptr);
+    if (!window) {
+        const char* err = nullptr;
+        glfwGetError(&err);
+        std::cerr << "FATAL: Failed to create GLFW window: " << (err ? err : "unknown error") << std::endl;
+        std::cerr << "  Required: OpenGL 4.6 core profile." << std::endl;
+        std::cerr << "  Check: GPU drivers installed, GPU supports GL 4.6, display is connected." << std::endl;
+        glfwTerminate();
+        std::exit(1);
+    }
     glfwMakeContextCurrent(window);
-    gladLoadGL((GLADloadfunc)glfwGetProcAddress);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (!gladLoadGL((GLADloadfunc)glfwGetProcAddress)) {
+        std::cerr << "FATAL: Failed to load OpenGL functions via GLAD" << std::endl;
+        std::exit(1);
+    }
+    std::cerr << "[engine] OpenGL " << glGetString(GL_VERSION) << std::endl;
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
@@ -156,6 +173,15 @@ Renderer::Renderer(int width, int height) {
     initTextVAO();
     initHotbar();
     initFullscreenQuad();
+    glCreateVertexArrays(1, &m_panelVAO);
+    glCreateBuffers(1, &m_panelVBO);
+    glEnableVertexArrayAttrib(m_panelVAO, 0);
+    glVertexArrayAttribFormat(m_panelVAO, 0, 3, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(m_panelVAO, 0, 0);
+    glEnableVertexArrayAttrib(m_panelVAO, 1);
+    glVertexArrayAttribFormat(m_panelVAO, 1, 2, GL_FLOAT, GL_FALSE, 3*sizeof(float));
+    glVertexArrayAttribBinding(m_panelVAO, 1, 0);
+    glVertexArrayVertexBuffer(m_panelVAO, 0, m_panelVBO, 0, 5*sizeof(float));
 }
 
 Renderer::~Renderer() {
@@ -178,6 +204,8 @@ Renderer::~Renderer() {
     glDeleteTextures(1, &m_fontTex);
     glDeleteVertexArrays(1, &m_textVAO);
     glDeleteBuffers(1, &m_textVBO);
+    glDeleteVertexArrays(1, &m_panelVAO);
+    glDeleteBuffers(1, &m_panelVBO);
     glDeleteProgram(m_worldProgram);
     glDeleteProgram(m_uiProgram);
     glfwTerminate();
@@ -503,27 +531,6 @@ void Renderer::initHotbar() {
     glVertexArrayVertexBuffer(m_hotbarVAO, 0, m_hotbarVBO, 0, 5 * sizeof(float));
 }
 
-void Renderer::renderHotbar(int selectedSlot) {
-    glUseProgram(m_uiProgram);
-    glBindTextureUnit(0, m_whiteTex);
-    glDisable(GL_DEPTH_TEST);
-
-    glBindVertexArray(m_hotbarVAO);
-
-    for (int i = 0; i < 9; ++i) {
-        if (i == selectedSlot) {
-            glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), 1.0f, 1.0f, 1.0f, 0.8f);
-        } else {
-            glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), 0.2f, 0.2f, 0.2f, 0.6f);
-        }
-        glDrawArrays(GL_TRIANGLES, i * 6, 6);
-    }
-
-    glBindVertexArray(0);
-    glEnable(GL_DEPTH_TEST);
-    glUseProgram(0);
-}
-
 void Renderer::renderCrosshair() {
     glUseProgram(m_uiProgram);
     glBindTextureUnit(0, m_whiteTex);
@@ -549,43 +556,6 @@ void Renderer::renderBlockHighlight(const glm::ivec3& blockPos) {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glEnable(GL_DEPTH_TEST);
     glBindVertexArray(0);
-    glUseProgram(0);
-}
-
-void Renderer::renderText(const std::string& text, float ndcX, float ndcY, float scaleH) {
-    const float GW=5.0f, GH=7.0f, N=64.0f;
-    float gh = scaleH;
-    float gw = scaleH * (GW/GH);
-    float adv = gw * 1.15f;
-    static std::vector<float> v;
-    v.clear();
-    float curX = ndcX;
-    for (char c : text) {
-        int gi = glyphIndex(c);
-        if (gi < 0) { curX += adv; continue; }
-        float u0 = (gi*GW)/(N*GW), u1 = ((gi+1)*GW)/(N*GW);
-        float top = ndcY, bot = ndcY - gh;
-        float q[6][5] = {
-            {curX,    top, 0, u0, 1.0f},
-            {curX+gw, top, 0, u1, 1.0f},
-            {curX+gw, bot, 0, u1, 0.0f},
-            {curX,    top, 0, u0, 1.0f},
-            {curX+gw, bot, 0, u1, 0.0f},
-            {curX,    bot, 0, u0, 0.0f},
-        };
-        for (int i=0;i<6;++i) for (int j=0;j<5;++j) v.push_back(q[i][j]);
-        curX += adv;
-    }
-    if (v.empty()) return;
-    glNamedBufferData(m_textVBO, v.size()*sizeof(float), v.data(), GL_DYNAMIC_DRAW);
-    glUseProgram(m_uiProgram);
-    glBindTextureUnit(0, m_fontTex);
-    glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), 1,1,1,1);
-    glDisable(GL_DEPTH_TEST);
-    glBindVertexArray(m_textVAO);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size()/5));
-    glBindVertexArray(0);
-    glEnable(GL_DEPTH_TEST);
     glUseProgram(0);
 }
 
@@ -660,12 +630,12 @@ void Renderer::renderPanel(float x, float y, float w, float h, const glm::vec4& 
         x+w,   y+h,   0, 1, 1,
         x,     y+h,   0, 0, 1,
     };
-    glNamedBufferData(m_textVBO, sizeof(verts), verts, GL_DYNAMIC_DRAW);
+    glNamedBufferData(m_panelVBO, sizeof(verts), verts, GL_DYNAMIC_DRAW);
     glUseProgram(m_uiProgram);
     glBindTextureUnit(0, m_whiteTex);
     glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), bgColor.r, bgColor.g, bgColor.b, bgColor.a);
     glDisable(GL_DEPTH_TEST);
-    glBindVertexArray(m_textVAO);
+    glBindVertexArray(m_panelVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
     glEnable(GL_DEPTH_TEST);

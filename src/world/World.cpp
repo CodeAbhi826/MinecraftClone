@@ -121,6 +121,29 @@ void World::updatePlayerPosition(int px, int pz, int dist) {
             loadChunkAsync(centerX + dx, centerZ + dz);
 }
 
+bool World::isChunkLoaded(int cx, int cz) const {
+    std::shared_lock lock(chunkMutex);
+    return chunks.contains(chunkKey(cx, cz));
+}
+
+bool World::isChunkReady(int cx, int cz) const {
+    std::shared_lock lock(chunkMutex);
+    auto it = chunks.find(chunkKey(cx, cz));
+    return it != chunks.end() && it->second->state == Chunk::Ready;
+}
+
+void World::ensureChunkLoaded(int cx, int cz) {
+    std::shared_lock lock(chunkMutex);
+    if (!chunks.contains(chunkKey(cx, cz))) {
+        lock.unlock();
+        loadChunkAsync(cx, cz);
+    }
+}
+
+void World::processChunkLoading() {
+    std::this_thread::yield();
+}
+
 std::vector<World::PendingUpload> World::drainUploads() {
     std::lock_guard lk(uploadMutex);
     std::vector<PendingUpload> out;

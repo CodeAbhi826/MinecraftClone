@@ -5,9 +5,9 @@
 #include <algorithm>
 
 static uint8_t noise(int x, int y, int seed) {
-    int n = x + y * 57 + seed * 137;
+    unsigned n = (unsigned)(x + y * 57 + seed * 137);
     n = (n << 13) ^ n;
-    return (n * (n * n * 60493 + 19990303) + 1376312589) & 0xff;
+    return (unsigned char)((n * (n * n * 60493u + 19990303u) + 1376312589u) & 0xff);
 }
 
 TextureAtlas::~TextureAtlas() {
@@ -62,10 +62,12 @@ void TextureAtlas::generateProcedural() {
                         m_textureSize, m_textureSize, m_layerCount,
                         GL_RGBA, GL_UNSIGNED_BYTE, data.data());
     glGenerateTextureMipmap(m_textureId);
-    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(m_textureId, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
     glTextureParameteri(m_textureId, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+glTextureParameteri(m_textureId, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+if (GLAD_GL_ARB_texture_filter_anisotropic)
+    glTextureParameterf(m_textureId, GL_TEXTURE_MAX_ANISOTROPY, 4.0f);
     m_loaded = true;
 }
 

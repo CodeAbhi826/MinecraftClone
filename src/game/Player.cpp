@@ -107,7 +107,9 @@ void Player::update(float dt, World& world) {
 }
 
 void Player::processInput(GLFWwindow* win, float dt) {
-    float speed = flying ? 15.0f : 5.0f;
+    bool sprinting = !flying && glfwGetKey(win, GLFW_KEY_LEFT_SHIFT);
+    float baseSpeed = flying ? 15.0f : 5.0f;
+    float speed = sprinting ? baseSpeed * 2.0f : baseSpeed;
     Vec3 front(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
     Vec3 right = glm::cross(front, Vec3(0, 1, 0));
     Vec3 move(0);
@@ -122,7 +124,7 @@ void Player::processInput(GLFWwindow* win, float dt) {
     velocity.z = glm::mix(velocity.z, targetVel.z, std::min(1.0f, accel * dt));
     if (flying) {
         if (glfwGetKey(win, GLFW_KEY_SPACE)) velocity.y = speed;
-        if (glfwGetKey(win, GLFW_KEY_LEFT_SHIFT)) velocity.y = -speed;
+        if (glfwGetKey(win, GLFW_KEY_LEFT_CONTROL)) velocity.y = -speed;
     } else {
         if (glfwGetKey(win, GLFW_KEY_SPACE) && onGround) velocity.y = 8.0f;
     }

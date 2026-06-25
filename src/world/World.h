@@ -21,6 +21,10 @@ public:
     void updatePlayerPosition(int px, int pz, int renderDistance);
     void loadChunkAsync(int cx, int cz);
     void markChunkDirty(int cx, int cz);
+    bool isChunkLoaded(int cx, int cz) const;
+    bool isChunkReady(int cx, int cz) const;
+    void ensureChunkLoaded(int cx, int cz);
+    void processChunkLoading();
 
     struct PendingUpload { int cx, cz; ChunkMesh mesh; };
     std::vector<PendingUpload> drainUploads();

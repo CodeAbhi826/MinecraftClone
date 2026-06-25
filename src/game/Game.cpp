@@ -14,7 +14,49 @@ void Game::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 
 void Game::cursorCallback(GLFWwindow* window, double xpos, double ypos) {
     Game* self = static_cast<Game*>(glfwGetWindowUserPointer(window));
-    if (self) self->player.onMouseMove(xpos, ypos);
+    if (!self) return;
+    self->mouseX = xpos;
+    self->mouseY = ypos;
+    if (self->state == GameState::Playing) {
+        self->player.onMouseMove(xpos, ypos);
+    }
+}
+
+void Game::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    Game* self = static_cast<Game*>(glfwGetWindowUserPointer(window));
+    if (!self) return;
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            self->leftPressed = true;
+            if (self->state == GameState::Settings) {
+                double mx = self->mouseX;
+                double my = self->mouseY;
+                int winW, winH;
+                glfwGetWindowSize(window, &winW, &winH);
+                float ndcX = (float)(mx / winW * 2.0 - 1.0);
+                float ndcY = (float)(1.0 - my / winH * 2.0);
+                static const struct { float x, y, w; } sliderAreas[4] = {
+                    {-0.55f, 0.34f, 0.5f},
+                    {-0.55f, 0.22f, 0.5f},
+                    {-0.55f, 0.10f, 0.5f},
+                    {-0.55f, -0.12f, 0.5f},
+                };
+                for (int i = 0; i < 4; ++i) {
+                    float sx = sliderAreas[i].x;
+                    float sy = sliderAreas[i].y;
+                    float sw = sliderAreas[i].w;
+                    float sh = 0.06f;
+                    if (ndcX >= sx && ndcX <= sx + sw && ndcY >= sy - sh/2 && ndcY <= sy + sh/2) {
+                        self->draggingSlider = i;
+                        break;
+                    }
+                }
+            }
+        } else if (action == GLFW_RELEASE) {
+            self->leftPressed = false;
+            self->draggingSlider = -1;
+        }
+    }
 }
 
 void Game::log(const std::string& level, const std::string& scope, const std::string& msg) {
@@ -27,7 +69,7 @@ Game::Game()
 : renderer(std::make_unique<Renderer>(1280, 720)),
   world(std::make_unique<World>(12345ull))
 {
-    player.position = Vec3(0, 100, 0);
+    player.position = Vec3(0, 120, 0);
     lastTime = glfwGetTime();
     fpsLast = lastTime;
     renderer->setRenderDistance(settings.renderDistance);
@@ -35,10 +77,11 @@ Game::Game()
     glfwSetScrollCallback(renderer->window, scrollCallback);
     glfwSetWindowUserPointer(renderer->window, this);
     glfwSetCursorPosCallback(renderer->window, cursorCallback);
+    glfwSetMouseButtonCallback(renderer->window, mouseButtonCallback);
     if (glfwRawMouseMotionSupported())
         glfwSetInputMode(renderer->window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
     log("INFO", "world", "World initialized with seed 12345");
-    log("INFO", "player", "Spawned at (0, 100, 0)");
+    log("INFO", "player", "Spawned at (0, 120, 0)");
 }
 
 void Game::run() {
@@ -58,12 +101,13 @@ void Game::run() {
                 settings.renderDistance--;
                 renderer->setRenderDistance(settings.renderDistance);
                 world->updatePlayerPosition((int)player.position.x, (int)player.position.z, settings.renderDistance);
+                log("INFO", "perf", "Auto-lowered render distance to " + std::to_string(settings.renderDistance));
                 lowFpsTimer = 0;
             }
         } else if (fps > 80) {
             highFpsTimer += dt;
             lowFpsTimer = 0;
-            if (highFpsTimer > 5.0 && settings.renderDistance < 12) {
+            if (highFpsTimer > 5.0 && settings.renderDistance < settings.userRenderDistance) {
                 settings.renderDistance++;
                 renderer->setRenderDistance(settings.renderDistance);
                 highFpsTimer = 0;
@@ -71,6 +115,56 @@ void Game::run() {
         } else {
             lowFpsTimer = 0;
             highFpsTimer = 0;
+        }
+
+        if (state == GameState::Loading) {
+            static int loadStep = 0;
+            static double loadStart = glfwGetTime();
+
+            if (loadStep == 0) {
+                log("INFO", "world", "Generating terrain...");
+                loadStep = 1;
+            }
+
+            // Populate world chunks around spawn
+            int loaded = 0;
+            const int targetChunks = 49;
+            int px = 0, pz = 0;
+            int taken = 0;
+            for (int dz = -6; dz <= 6 && loaded < targetChunks/3; ++dz) {
+                for (int dx = -6; dx <= 6 && loaded < targetChunks/3; ++dx) {
+                    int cx = dx, cz = dz;
+                    if (!world->isChunkLoaded(cx, cz)) {
+                        world->ensureChunkLoaded(cx, cz);
+                        taken++;
+                    }
+                    loaded++;
+                }
+            }
+            world->processChunkLoading();
+
+            float progress = 0.0f;
+            int totalChunks = 0, readyChunks = 0;
+            for (int dz = -6; dz <= 6; ++dz) {
+                for (int dx = -6; dx <= 6; ++dx) {
+                    totalChunks++;
+                    if (world->isChunkReady(dx, dz))
+                        readyChunks++;
+                }
+            }
+            progress = totalChunks > 0 ? (float)readyChunks / totalChunks : 0.0f;
+
+            renderer->beginFrame(glm::mat4(1.0f));
+            renderLoadingScreen(progress);
+            renderer->endFrame();
+            glfwPollEvents();
+
+            if (progress >= 1.0f || (glfwGetTime() - loadStart > 8.0)) {
+                log("INFO", "engine", "Loading complete (" + std::to_string(readyChunks) + "/" + std::to_string(totalChunks) + " chunks)");
+                state = GameState::StartScreen;
+                loadStep = 0;
+            }
+            continue;
         }
 
         if (state == GameState::StartScreen) {
@@ -92,11 +186,18 @@ void Game::run() {
                 showHelp = !showHelp;
             }
 
+            Vec3 startCamPos(0, 180, 80);
+            float startCamYaw = 180.0f;
+            float startCamPitch = -25.0f;
+            glm::mat4 startView = glm::lookAt(
+                glm::vec3(startCamPos.x, startCamPos.y, startCamPos.z),
+                glm::vec3(0, 60, 0),
+                glm::vec3(0, 1, 0)
+            );
             glm::mat4 proj = glm::perspective(glm::radians(settings.fov), 1280.0f / 720.0f, 0.1f, 1000.0f);
-            glm::mat4 view = player.getViewMatrix();
-            renderer->m_camPos = player.position + Vec3(0, 1.6f, 0);
-            renderer->beginFrame(proj * view);
-            renderer->renderChunks(view, proj);
+            renderer->m_camPos = startCamPos;
+            renderer->beginFrame(proj * startView);
+            renderer->renderChunks(startView, proj);
             renderer->endFrame();
 
             renderStartScreen();
@@ -107,6 +208,23 @@ void Game::run() {
         if (state == GameState::Settings) {
             if (glfwGetKey(renderer->window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
                 state = GameState::StartScreen;
+                draggingSlider = -1;
+            }
+
+            if (draggingSlider >= 0) {
+                int winW, winH;
+                glfwGetWindowSize(renderer->window, &winW, &winH);
+                float ndcX = (float)(mouseX / winW * 2.0 - 1.0);
+                static const struct { float x, w; } sliderArea[4] = {
+                    {-0.55f, 0.5f}, {-0.55f, 0.5f}, {-0.55f, 0.5f}, {-0.55f, 0.5f},
+                };
+                float clamped = glm::clamp((ndcX - sliderArea[draggingSlider].x) / sliderArea[draggingSlider].w, 0.0f, 1.0f);
+                switch (draggingSlider) {
+                    case 0: settings.userRenderDistance = (int)glm::round(glm::mix(2.0f, 12.0f, clamped)); settings.renderDistance = settings.userRenderDistance; renderer->setRenderDistance(settings.renderDistance); break;
+                    case 1: settings.fov = glm::mix(60.0f, 110.0f, clamped); break;
+                    case 2: settings.mouseSensitivity = glm::mix(0.01f, 0.2f, clamped); break;
+                    case 3: settings.dayNightSpeed = glm::mix(0.0f, 10.0f, clamped); break;
+                }
             }
 
             renderer->beginFrame(glm::mat4(1.0f));
@@ -141,6 +259,16 @@ void Game::run() {
             if (renderer->timeOfDay < 0) renderer->timeOfDay += 1.0f;
         }
 
+        if (glfwGetKey(renderer->window, GLFW_KEY_F) == GLFW_PRESS) {
+            if (!fPressed) {
+                player.flying = !player.flying;
+                log("DEBUG", "player", player.flying ? "Fly mode ON" : "Fly mode OFF");
+                fPressed = true;
+            }
+        } else {
+            fPressed = false;
+        }
+
         player.processInput(renderer->window, dt);
 
         if (scrollOffset != 0.0) {
@@ -163,7 +291,16 @@ void Game::run() {
 
         if (player.position.y < -100) {
             log("WARN", "player", "Fell out of world, respawning");
-            player.position = Vec3(0, 100, 0);
+            player.position = Vec3(0, 256, 0);
+            bool found = false;
+            for (int y = 256; y > -64; --y) {
+                if (world->getBlock(0, y, 0) != (uint16_t)Block::ID::air) {
+                    player.position = Vec3(0, y + 2, 0);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) player.position = Vec3(0, 120, 0);
             player.velocity = Vec3(0);
         }
 
@@ -240,6 +377,15 @@ void Game::renderStartScreen() {
     }
 }
 
+void Game::renderLoadingScreen(float progress) {
+    float barW = 0.6f, barH = 0.04f;
+    renderer->renderTextColored("LOADING", -0.12f, 0.1f, 0.08f, glm::vec3(1, 1, 1));
+    renderer->renderPanel(-barW/2, -0.04f, barW, barH, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
+    renderer->renderPanel(-barW/2, -0.04f, barW * progress, barH, glm::vec4(0.16f, 0.7f, 0.4f, 1.0f));
+    renderer->renderTextColored(std::to_string((int)(progress * 100)) + "%",
+                                -0.05f, -0.12f, 0.035f, glm::vec3(1, 1, 1));
+}
+
 void Game::renderHelpOverlay() {
     renderer->renderFullscreenQuad(glm::vec4(0, 0, 0, 0.6f));
     renderer->renderPanel(-0.4f, -0.5f, 0.8f, 1.0f, glm::vec4(0.12f, 0.12f, 0.14f, 0.95f));
@@ -251,6 +397,7 @@ void Game::renderHelpOverlay() {
         {"LOOK",        "MOUSE"},
         {"JUMP",        "SPACE"},
         {"SPRINT",      "SHIFT"},
+        {"CTRL DESCEND", "CTRL (FLY)"},
         {"BREAK BLOCK", "HOLD LEFT CLICK"},
         {"PLACE BLOCK", "RIGHT CLICK"},
         {"HOTBAR",      "1-9 / SCROLL WHEEL"},
@@ -323,7 +470,7 @@ void Game::renderLoggerPanel() {
                        : it->level == "INFO"  ? glm::vec3(0.9f, 0.9f, 0.9f)
                                               : glm::vec3(0.5f, 0.5f, 0.5f);
         std::string line = "[" + it->level + "] [" + it->scope + "] " + it->msg;
-        renderer->renderTextColored(line.substr(0, 80), -0.75f, y, 0.025f, color);
+        renderer->renderTextColored(line.size() > 77 ? line.substr(0, 77) + "..." : line, -0.75f, y, 0.025f, color);
         y -= 0.035f;
     }
 

@@ -8,7 +8,8 @@
 #include "Player.h"
 
 struct Settings {
-    int renderDistance = 8;
+    int renderDistance = 8;       // actual (may be auto-lowered)
+    int userRenderDistance = 8;   // what the user set in Settings UI
     float fov = 70.0f;
     bool fogEnabled = true;
     float mouseSensitivity = 0.05f;
@@ -22,7 +23,7 @@ struct LogEntry {
     std::string msg;
 };
 
-enum class GameState { StartScreen, Playing, Settings, Logger };
+enum class GameState { Loading, StartScreen, Playing, Settings, Logger };
 
 class Game {
 public:
@@ -37,11 +38,13 @@ private:
     std::unique_ptr<World> world;
     Player player;
     double lastTime;
-    GameState state = GameState::StartScreen;
+    GameState state = GameState::Loading;
     bool showHelp = true;
     float accumulator = 0;
     std::vector<World::PendingUpload> pendingUploads;
-    bool leftPressed = false, rightPressed = false;
+    bool leftPressed = false, rightPressed = false, fPressed = false;
+    double mouseX = 0, mouseY = 0;
+    int draggingSlider = -1;
     double frameTimeAvg = 0.016;
     double lowFpsTimer = 0, highFpsTimer = 0;
     int fpsFrames = 0;
@@ -54,8 +57,10 @@ private:
     void renderSettingsPanel();
     void renderLoggerPanel();
     void renderDebugHUD(int fps, float frameMs, int chunks, int tris, int drawCalls);
+    void renderLoadingScreen(float progress);
 
     static double scrollOffset;
     static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
     static void cursorCallback(GLFWwindow* window, double xpos, double ypos);
+    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 };

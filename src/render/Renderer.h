@@ -17,8 +17,7 @@ public:
     void renderChunks(const glm::mat4& view, const glm::mat4& proj);
     void renderCrosshair();
     void renderBlockHighlight(const glm::ivec3& blockPos);
-    void renderText(const std::string& text, float ndcX, float ndcY, float scaleH);
-    void renderHotbar(int selectedSlot);
+
     void setRenderDistance(int chunks) { m_cullRadius = 16.0f * (chunks + 0.5f); }
     void updateFrustum(const glm::mat4& view, const glm::mat4& proj);
     void renderFullscreenQuad(const glm::vec4& color);
@@ -56,6 +55,7 @@ private:
     GLuint m_highlightVAO=0, m_highlightVBO=0, m_highlightEBO=0;
     GLuint m_hotbarVAO=0, m_hotbarVBO=0;
     GLuint m_fsVAO=0, m_fsVBO=0;
+    GLuint m_panelVAO=0, m_panelVBO=0;
     void initCrosshair();
     void initHighlight();
     void initFont();
