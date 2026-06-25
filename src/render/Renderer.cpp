@@ -131,6 +131,7 @@ Renderer::Renderer(int width, int height) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.5f, 0.7f, 1.0f, 1.0f);
+    glfwSwapInterval(1);
 
     m_worldProgram = createProgram(worldVertSrc, worldFragSrc);
     m_uiProgram = createProgram(uiVertSrc, uiFragSrc);
@@ -154,6 +155,7 @@ Renderer::Renderer(int width, int height) {
     initFont();
     initTextVAO();
     initHotbar();
+    initFullscreenQuad();
 }
 
 Renderer::~Renderer() {
@@ -182,6 +184,8 @@ Renderer::~Renderer() {
 }
 
 void Renderer::beginFrame(const glm::mat4& projView) {
+    glm::vec3 sky = skyColorForTime(timeOfDay);
+    glClearColor(sky.r, sky.g, sky.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(m_worldProgram);
     glUniformMatrix4fv(glGetUniformLocation(m_worldProgram, "uMVP"), 1, GL_FALSE, &projView[0][0]);
@@ -283,7 +287,8 @@ void Renderer::renderChunks(const glm::mat4& view, const glm::mat4& proj) {
     m_textureAtlas.bind(0);
 
     glUniform3f(glGetUniformLocation(m_worldProgram, "uCamPos"), m_camPos.x, m_camPos.y, m_camPos.z);
-    glUniform4f(glGetUniformLocation(m_worldProgram, "uFogColor"), 0.5f, 0.7f, 1.0f, 1.0f);
+    glm::vec3 fog = skyColorForTime(timeOfDay);
+    glUniform4f(glGetUniformLocation(m_worldProgram, "uFogColor"), fog.r, fog.g, fog.b, 1.0f);
     glUniform1f(glGetUniformLocation(m_worldProgram, "uFogStart"), 16.0f * 6.0f);
     glUniform1f(glGetUniformLocation(m_worldProgram, "uFogEnd"), 16.0f * 12.0f);
 
@@ -356,7 +361,23 @@ void Renderer::initHighlight() {
 }
 
 void Renderer::initFont() {
-    static const uint8_t G[15][7] = {
+    static const uint8_t FONT5x7[64][7] = {
+        {0,0,0,0,0,0,0},
+        {0b00100,0b00100,0b00100,0b00100,0b00100,0b00000,0b00100},
+        {0b01010,0b01010,0b01010,0b00000,0b00000,0b00000,0b00000},
+        {0b01010,0b11111,0b01010,0b01010,0b11111,0b01010,0b00000},
+        {0b00100,0b01111,0b10100,0b01110,0b00101,0b11110,0b00100},
+        {0b11000,0b11001,0b00010,0b00100,0b01000,0b10011,0b00011},
+        {0b01100,0b10010,0b10100,0b01000,0b10101,0b10010,0b01101},
+        {0b00100,0b00100,0b00000,0b00000,0b00000,0b00000,0b00000},
+        {0b00010,0b00100,0b01000,0b01000,0b01000,0b00100,0b00010},
+        {0b01000,0b00100,0b00010,0b00010,0b00010,0b00100,0b01000},
+        {0b00000,0b00100,0b10101,0b01110,0b10101,0b00100,0b00000},
+        {0b00000,0b00100,0b00100,0b11111,0b00100,0b00100,0b00000},
+        {0b00000,0b00000,0b00000,0b00000,0b00100,0b00100,0b01000},
+        {0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000},
+        {0b00000,0b00000,0b00000,0b00000,0b00000,0b00110,0b00110},
+        {0b00001,0b00010,0b00100,0b01000,0b10000,0b00000,0b00000},
         {0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110},
         {0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110},
         {0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111},
@@ -367,19 +388,52 @@ void Renderer::initFont() {
         {0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000},
         {0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110},
         {0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100},
-        {0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000},
-        {0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000},
-        {0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110},
         {0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000},
-        {0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000},
+        {0b00000,0b00100,0b00000,0b00000,0b00100,0b00100,0b01000},
+        {0b00010,0b00100,0b01000,0b10000,0b01000,0b00100,0b00010},
+        {0b00000,0b00000,0b11111,0b00000,0b11111,0b00000,0b00000},
+        {0b01000,0b00100,0b00010,0b00001,0b00010,0b00100,0b01000},
+        {0b01110,0b10001,0b00001,0b00010,0b00100,0b00000,0b00100},
+        {0b01110,0b10001,0b10111,0b10101,0b10111,0b10000,0b01110},
+        {0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001},
+        {0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110},
+        {0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110},
+        {0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110},
+        {0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111},
+        {0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000},
+        {0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01111},
+        {0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001},
+        {0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110},
+        {0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100},
+        {0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001},
+        {0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111},
+        {0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001},
+        {0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001},
+        {0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110},
+        {0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000},
+        {0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101},
+        {0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001},
+        {0b01111,0b10000,0b10000,0b01110,0b00001,0b00001,0b11110},
+        {0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100},
+        {0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110},
+        {0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100},
+        {0b10001,0b10001,0b10001,0b10101,0b10101,0b10101,0b01010},
+        {0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001},
+        {0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100},
+        {0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111},
+        {0b01110,0b01000,0b01000,0b01000,0b01000,0b01000,0b01110},
+        {0b10000,0b01000,0b00100,0b00010,0b00001,0b00000,0b00000},
+        {0b01110,0b00010,0b00010,0b00010,0b00010,0b00010,0b01110},
+        {0b00100,0b01010,0b10001,0b00000,0b00000,0b00000,0b00000},
+        {0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b11111},
     };
-    const int GW=5, GH=7, N=15, texW=N*GW, texH=GH;
+    const int GW=5, GH=7, N=64, texW=N*GW, texH=GH;
     std::vector<uint8_t> data((size_t)texW*texH*4, 0);
     for (int gy=0; gy<GH; ++gy) {
         int row = (GH-1) - gy;
         for (int g=0; g<N; ++g)
             for (int gx=0; gx<GW; ++gx) {
-                bool on = (G[g][gy] >> (4-gx)) & 1;
+                bool on = (FONT5x7[g][gy] >> (4-gx)) & 1;
                 size_t idx = ((size_t)row*texW + (g*GW+gx))*4;
                 uint8_t v = on?255:0;
                 data[idx+0]=v; data[idx+1]=v; data[idx+2]=v; data[idx+3]=v;
@@ -407,12 +461,8 @@ void Renderer::initTextVAO() {
 }
 
 int Renderer::glyphIndex(char c) const {
-    if (c>='0'&&c<='9') return c-'0';
-    if (c=='F') return 10;
-    if (c=='P') return 11;
-    if (c=='S') return 12;
-    if (c==':') return 13;
-    if (c==' ') return 14;
+    if (c >= 32 && c <= 95) return c - 32;
+    if (c >= 'a' && c <= 'z') return c - 'a' + 65;
     return -1;
 }
 
@@ -503,7 +553,7 @@ void Renderer::renderBlockHighlight(const glm::ivec3& blockPos) {
 }
 
 void Renderer::renderText(const std::string& text, float ndcX, float ndcY, float scaleH) {
-    const float GW=5.0f, GH=7.0f, N=15.0f;
+    const float GW=5.0f, GH=7.0f, N=64.0f;
     float gh = scaleH;
     float gw = scaleH * (GW/GH);
     float adv = gw * 1.15f;
@@ -537,6 +587,172 @@ void Renderer::renderText(const std::string& text, float ndcX, float ndcY, float
     glBindVertexArray(0);
     glEnable(GL_DEPTH_TEST);
     glUseProgram(0);
+}
+
+glm::vec3 Renderer::skyColorForTime(float t) const {
+    glm::vec3 night(0.04f, 0.06f, 0.12f);
+    glm::vec3 day(0.5f, 0.7f, 1.0f);
+    glm::vec3 dusk(0.95f, 0.55f, 0.30f);
+    float sunY = sin(t * 6.28318f - 1.5708f);
+    if (sunY > 0.2f) return day;
+    if (sunY > -0.2f) {
+        float k = (sunY + 0.2f) / 0.4f;
+        return glm::mix(night, day, k) + dusk * (1.0f - std::abs(sunY) * 5.0f) * 0.3f;
+    }
+    return night;
+}
+
+glm::vec3 Renderer::blockAverageColor(int blockId) const {
+    switch ((Block::ID)blockId) {
+        case Block::ID::grass_block: return {0.36f, 0.58f, 0.20f};
+        case Block::ID::dirt:        return {0.55f, 0.45f, 0.33f};
+        case Block::ID::stone:       return {0.50f, 0.50f, 0.50f};
+        case Block::ID::cobblestone: return {0.39f, 0.39f, 0.39f};
+        case Block::ID::wood:        return {0.63f, 0.47f, 0.31f};
+        case Block::ID::leaves:      return {0.16f, 0.43f, 0.12f};
+        case Block::ID::sand:        return {0.86f, 0.81f, 0.64f};
+        case Block::ID::glass:       return {0.78f, 0.86f, 0.94f};
+        case Block::ID::bedrock:     return {0.16f, 0.16f, 0.16f};
+        default:                     return {0.5f, 0.5f, 0.5f};
+    }
+}
+
+void Renderer::initFullscreenQuad() {
+    if (m_fsVAO) return;
+    float verts[] = {
+        -1, -1, 0,  0, 0,
+         1, -1, 0,  1, 0,
+         1,  1, 0,  1, 1,
+        -1, -1, 0,  0, 0,
+         1,  1, 0,  1, 1,
+        -1,  1, 0,  0, 1,
+    };
+    glCreateVertexArrays(1, &m_fsVAO);
+    glCreateBuffers(1, &m_fsVBO);
+    glNamedBufferData(m_fsVBO, sizeof(verts), verts, GL_STATIC_DRAW);
+    glEnableVertexArrayAttrib(m_fsVAO, 0);
+    glVertexArrayAttribFormat(m_fsVAO, 0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float));
+    glVertexArrayAttribBinding(m_fsVAO, 0, 0);
+    glEnableVertexArrayAttrib(m_fsVAO, 1);
+    glVertexArrayAttribFormat(m_fsVAO, 1, 2, GL_FLOAT, GL_FALSE, 3*sizeof(float));
+    glVertexArrayAttribBinding(m_fsVAO, 1, 0);
+    glVertexArrayVertexBuffer(m_fsVAO, 0, m_fsVBO, 0, 5*sizeof(float));
+}
+
+void Renderer::renderFullscreenQuad(const glm::vec4& color) {
+    initFullscreenQuad();
+    glUseProgram(m_uiProgram);
+    glBindTextureUnit(0, m_whiteTex);
+    glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), color.r, color.g, color.b, color.a);
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(m_fsVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderPanel(float x, float y, float w, float h, const glm::vec4& bgColor) {
+    float verts[] = {
+        x,     y,     0, 0, 0,
+        x+w,   y,     0, 1, 0,
+        x+w,   y+h,   0, 1, 1,
+        x,     y,     0, 0, 0,
+        x+w,   y+h,   0, 1, 1,
+        x,     y+h,   0, 0, 1,
+    };
+    glNamedBufferData(m_textVBO, sizeof(verts), verts, GL_DYNAMIC_DRAW);
+    glUseProgram(m_uiProgram);
+    glBindTextureUnit(0, m_whiteTex);
+    glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), bgColor.r, bgColor.g, bgColor.b, bgColor.a);
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(m_textVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderButton(float x, float y, float w, float h, const glm::vec4& color, const std::string& label) {
+    renderPanel(x, y, w, h, color);
+    float textW = label.size() * 0.035f * 0.6f;
+    float textH = 0.04f;
+    renderTextColored(label, x + (w - textW) / 2, y + (h - textH) / 2 + textH/2, 0.035f, glm::vec3(1, 1, 1));
+}
+
+void Renderer::renderTextColored(const std::string& text, float ndcX, float ndcY, float scaleH, const glm::vec3& color) {
+    const float GW=5.0f, GH=7.0f, N=64.0f;
+    float gh = scaleH;
+    float gw = scaleH * (GW/GH);
+    float adv = gw * 1.15f;
+    static std::vector<float> v;
+    v.clear();
+    float curX = ndcX;
+    for (char c : text) {
+        int gi = glyphIndex(c);
+        if (gi < 0) { curX += adv; continue; }
+        float u0 = (gi*GW)/(N*GW), u1 = ((gi+1)*GW)/(N*GW);
+        float top = ndcY, bot = ndcY - gh;
+        float q[6][5] = {
+            {curX,    top, 0, u0, 1.0f},
+            {curX+gw, top, 0, u1, 1.0f},
+            {curX+gw, bot, 0, u1, 0.0f},
+            {curX,    top, 0, u0, 1.0f},
+            {curX+gw, bot, 0, u1, 0.0f},
+            {curX,    bot, 0, u0, 0.0f},
+        };
+        for (int i=0;i<6;++i) for (int j=0;j<5;++j) v.push_back(q[i][j]);
+        curX += adv;
+    }
+    if (v.empty()) return;
+    glNamedBufferData(m_textVBO, v.size()*sizeof(float), v.data(), GL_DYNAMIC_DRAW);
+    glUseProgram(m_uiProgram);
+    glBindTextureUnit(0, m_fontTex);
+    glUniform4f(glGetUniformLocation(m_uiProgram, "uColor"), color.r, color.g, color.b, 1.0f);
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(m_textVAO);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size()/5));
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderSlider(float x, float y, float w, float value, float minV, float maxV) {
+    float t = (value - minV) / (maxV - minV);
+    renderPanel(x, y, w, 0.02f, glm::vec4(0.3f, 0.3f, 0.35f, 1.0f));
+    renderPanel(x, y, w * t, 0.02f, glm::vec4(0.16f, 0.7f, 0.4f, 1.0f));
+    float knobX = x + w * t - 0.01f;
+    renderPanel(knobX, y - 0.01f, 0.02f, 0.04f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+}
+
+void Renderer::renderCheckbox(float x, float y, bool checked, const std::string& label) {
+    renderPanel(x, y, 0.03f, 0.03f, checked ? glm::vec4(0.16f, 0.7f, 0.4f, 1.0f) : glm::vec4(0.2f, 0.2f, 0.22f, 1.0f));
+    renderTextColored(label, x + 0.04f, y + 0.02f, 0.035f, glm::vec3(1, 1, 1));
+}
+
+void Renderer::renderHotbarWithIcons(int selectedSlot, const TextureAtlas& atlas, const int hotbar[9]) {
+    float boxW = 0.08f, boxH = 0.12f, gap = 0.01f;
+    float startX = -((9 * boxW + 8 * gap) / 2.0f);
+    float y = -0.95f;
+    for (int i = 0; i < 9; ++i) {
+        float x = startX + i * (boxW + gap);
+        glm::vec4 bg = (i == selectedSlot) ? glm::vec4(1, 1, 1, 0.8f) : glm::vec4(0.15f, 0.15f, 0.15f, 0.7f);
+        renderPanel(x, y, boxW, boxH, bg);
+        int blockId = hotbar[i];
+        if (blockId > 0) {
+            glm::vec3 bc = blockAverageColor(blockId);
+            renderPanel(x + 0.01f, y + 0.01f, boxW - 0.02f, boxH - 0.02f, glm::vec4(bc, 1));
+        }
+        renderTextColored(std::to_string(i + 1), x + 0.005f, y + boxH - 0.02f, 0.025f, glm::vec3(0.7f, 0.7f, 0.7f));
+    }
+}
+
+void Renderer::getRenderStats(int& outChunks, int& outTris, int& outDrawCalls) const {
+    outChunks = (int)chunkMeshes.size();
+    outTris = 0;
+    outDrawCalls = 0;
+    for (auto& [key, cgl] : chunkMeshes) {
+        outTris += cgl.indexCount[0] / 3 + cgl.indexCount[1] / 3;
+        if (cgl.indexCount[0] > 0) outDrawCalls++;
+        if (cgl.indexCount[1] > 0) outDrawCalls++;
+    }
 }
 
 void Renderer::endFrame() {

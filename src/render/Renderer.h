@@ -21,10 +21,24 @@ public:
     void renderHotbar(int selectedSlot);
     void setRenderDistance(int chunks) { m_cullRadius = 16.0f * (chunks + 0.5f); }
     void updateFrustum(const glm::mat4& view, const glm::mat4& proj);
+    void renderFullscreenQuad(const glm::vec4& color);
+    void renderButton(float x, float y, float w, float h, const glm::vec4& color, const std::string& label);
+    void renderTextColored(const std::string& text, float ndcX, float ndcY, float scaleH, const glm::vec3& color);
+    void renderPanel(float x, float y, float w, float h, const glm::vec4& bgColor);
+    void renderSlider(float x, float y, float w, float value, float minV, float maxV);
+    void renderCheckbox(float x, float y, bool checked, const std::string& label);
+    void renderHotbarWithIcons(int selectedSlot, const TextureAtlas& atlas, const int hotbar[9]);
     void endFrame();
+    glm::vec3 skyColorForTime(float t) const;
+    glm::vec3 blockAverageColor(int blockId) const;
+    void getRenderStats(int& outChunks, int& outTris, int& outDrawCalls) const;
+    const TextureAtlas& getTextureAtlas() const { return m_textureAtlas; }
+
     GLFWwindow* window;
     glm::mat4 m_prevProjView = glm::mat4(1.0f);
     glm::vec3 m_camPos = glm::vec3(0.0f);
+    float timeOfDay = 0.3f;
+    float dayNightSpeed = 0.0f;
 private:
     float m_cullRadius = 16.0f * 12.0f;
     bool chunkInFrustum(int cx, int cz) const;
@@ -41,10 +55,12 @@ private:
     GLuint m_crosshairVAO=0, m_crosshairVBO=0;
     GLuint m_highlightVAO=0, m_highlightVBO=0, m_highlightEBO=0;
     GLuint m_hotbarVAO=0, m_hotbarVBO=0;
+    GLuint m_fsVAO=0, m_fsVBO=0;
     void initCrosshair();
     void initHighlight();
     void initFont();
     void initTextVAO();
     void initHotbar();
+    void initFullscreenQuad();
     int  glyphIndex(char c) const;
 };

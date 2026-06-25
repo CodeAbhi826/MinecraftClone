@@ -104,8 +104,6 @@ void Player::update(float dt, World& world) {
         }
     }
 
-    velocity.x *= 0.9f;
-    velocity.z *= 0.9f;
 }
 
 void Player::processInput(GLFWwindow* win, float dt) {
@@ -118,15 +116,16 @@ void Player::processInput(GLFWwindow* win, float dt) {
     if (glfwGetKey(win, GLFW_KEY_A)) move -= right;
     if (glfwGetKey(win, GLFW_KEY_D)) move += right;
     if (glm::length(move) > 0) move = glm::normalize(move);
-    velocity.x = move.x * speed;
-    velocity.z = move.z * speed;
+    Vec3 targetVel = move * speed;
+    float accel = onGround ? 15.0f : 5.0f;
+    velocity.x = glm::mix(velocity.x, targetVel.x, std::min(1.0f, accel * dt));
+    velocity.z = glm::mix(velocity.z, targetVel.z, std::min(1.0f, accel * dt));
     if (flying) {
         if (glfwGetKey(win, GLFW_KEY_SPACE)) velocity.y = speed;
         if (glfwGetKey(win, GLFW_KEY_LEFT_SHIFT)) velocity.y = -speed;
     } else {
         if (glfwGetKey(win, GLFW_KEY_SPACE) && onGround) velocity.y = 8.0f;
     }
-
 }
 
 void Player::breakBlock(World& world) {

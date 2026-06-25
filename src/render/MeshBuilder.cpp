@@ -21,10 +21,11 @@ const vec3 faceVerts[6][4] = {
 const vec2 uvs[4] = { {0,1}, {1,1}, {1,0}, {0,0} };
 }
 
-bool MeshBuilder::isVisible(const World& world, int wx, int wy, int wz, int dir) {
+bool MeshBuilder::isVisible(const World& world, int wx, int wy, int wz, int dir, BlockStateID selfId) {
     ivec3 n = ivec3(wx, wy, wz) + dirs[dir];
     BlockStateID id = world.getBlock(n.x, n.y, n.z);
     if (id == (uint16_t)Block::ID::air) return true;
+    if (id == selfId) return false;
     return !Block::getProperties((Block::ID)id).opaque;
 }
 
@@ -46,12 +47,12 @@ ChunkMesh MeshBuilder::build(const Chunk& chunk, const World& world) {
                 int wz = chunk.z * 16 + z;
 
                 for (int d = 0; d < 6; ++d) {
-                    if (isVisible(world, wx, wy, wz, d)) {
+                    if (isVisible(world, wx, wy, wz, d, block)) {
                         float ao = 1.0f;
                         if (d == 1) ao = 0.5f;
                         else if (d != 0) ao = 0.8f;
 
-                        uint16_t texLayer = block;
+                        uint16_t texLayer = (uint16_t)Block::textureForFace((Block::ID)block, d);
                         auto& verts = isTransparent ? mesh.transparentVertices : mesh.opaqueVertices;
                         auto& idxs = isTransparent ? mesh.transparentIndices : mesh.opaqueIndices;
 

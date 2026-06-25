@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <glm/glm.hpp>
+#include "../core/Block.h"
 
 class World;
 struct Chunk;
@@ -17,5 +18,5 @@ class MeshBuilder {
 public:
     static ChunkMesh build(const Chunk& chunk, const World& world);
 private:
-    static bool isVisible(const World& world, int wx, int wy, int wz, int dir);
+    static bool isVisible(const World& world, int wx, int wy, int wz, int dir, BlockStateID selfId);
 };

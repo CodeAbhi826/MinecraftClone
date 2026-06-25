@@ -48,4 +48,13 @@ namespace Block {
     inline const Properties& getProperties(ID id) {
         return getAllProperties()[(size_t)id];
     }
+
+    inline ID textureForFace(ID block, int faceDir) {
+        if (block == ID::grass_block) {
+            if (faceDir == 0) return ID::grass_block;
+            if (faceDir == 1) return ID::dirt;
+            return ID::dirt;
+        }
+        return block;
+    }
 }

@@ -27,6 +27,7 @@ public:
         (int)Block::ID::bedrock
     };
     int selectedSlot = 0;
+    float mouseSensitivity = 0.05f;
 
     void onMouseMove(double xpos, double ypos) {
         if (!hasLastCursor) {
@@ -35,8 +36,8 @@ public:
             hasLastCursor = true;
             return;
         }
-        float dx = float(xpos - lastMX) * 0.1f;
-        float dy = float(lastMY - ypos) * 0.1f;
+        float dx = float(xpos - lastMX) * mouseSensitivity;
+        float dy = float(lastMY - ypos) * mouseSensitivity;
         lastMX = xpos;
         lastMY = ypos;
         yaw   += dx;
