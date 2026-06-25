@@ -298,12 +298,14 @@ void Renderer::updateFrustum(const glm::mat4& view, const glm::mat4& proj) {
 bool Renderer::chunkInFrustum(int cx, int cz) const {
     float cxPos = cx * 16.0f + 8.0f;
     float czPos = cz * 16.0f + 8.0f;
+    float cyPos = 128.0f;
+    float radius = 200.0f;
     for (int i = 0; i < 6; ++i) {
         float d = m_frustumPlanes[i][0] * cxPos
-                + m_frustumPlanes[i][1] * 128.0f
+                + m_frustumPlanes[i][1] * cyPos
                 + m_frustumPlanes[i][2] * czPos
                 + m_frustumPlanes[i][3];
-        if (d < -200.0f) return false;
+        if (d < -radius) return false;
     }
     return true;
 }

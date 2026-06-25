@@ -1,0 +1,4 @@
+[engine] OpenGL 4.6 (Core Profile) Mesa 26.1.3-arch1.2
+[INFO] [world] World initialized with seed 12345
+[INFO] [player] Spawned at (0, 120, 0)
+[INFO] [world] Generating terrain...
